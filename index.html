@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تذكّر — الإدارة</title>
+<style>
+:root{--g:#0B2A21;--y:#D9B25A}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.7 system-ui,"Noto Naskh Arabic",sans-serif;background:#FBF8F1;color:#1c1c1c}
+header{background:var(--g);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+header b{color:var(--y)}main{padding:14px;max-width:720px;margin:auto}
+.c{background:#fff;border:1px solid #e6dfcc;border-radius:12px;padding:12px;margin-bottom:10px;overflow-wrap:anywhere}
+button{font:inherit;border:0;border-radius:10px;padding:9px 14px;background:var(--g);color:#fff;margin:2px}
+button.y{background:var(--y);color:#000}button.r{background:#a33}button.l{background:#eee;color:#000}
+input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid #cfc7ae;border-radius:10px;background:#fff;margin:4px 0 10px}
+textarea{min-height:90px}label{font-size:14px;color:#555}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:8px}.s{font-size:13px;color:#777}
+.n{font-size:22px;color:var(--g);font-weight:700}.m{background:#f3efe2;border-radius:8px;padding:6px 10px;margin:4px 0}.a{background:#e3efe8}
+</style></head><body>
+<header><b>تذكّر · الإدارة</b><span id="hb"></span></header>
+<main id="m"></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+const sb=supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY),$=s=>document.querySelector(s),M=$('#m');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const err=e=>{if(e){alert('خطأ: '+(e.message||e));return true}};
+const cut=(s,n)=>{s=String(s??'');return s.length>n?s.slice(0,n)+'…':s};
+let ME,L={};
+const ST=[['draft','مسودة'],['published','منشور']];
+const TY=[['fill_blank','أكمل الفراغ'],['mcq','اختيار من متعدد'],['true_false','صح/خطأ'],['short_answer','إجابة قصيرة'],['open','سؤال مفتوح'],['multi','متعدد الإجابات']];
+const TC=[['fiqh_benefit','فائدة فقهية'],['brief_info','معلومة مختصرة'],['common_mistake','خطأ شائع'],['study_tip','تنبيه دراسي'],['announcement','إعلان']];
+const E={
+ books:{n:'الكتب',tt:'name',ord:'sort_order',asc:1,f:[['name','الاسم','t'],['sort_order','الترتيب','n']]},
+ topics:{n:'الأبواب الفقهية',tt:'name',ord:'sort_order',asc:1,f:[['name','الاسم','t'],['sort_order','الترتيب','n']]},
+ levels:{n:'المستويات',tt:'name',ord:'id',asc:1,fixed:1,f:[['name','الاسم','t']]},
+ questions:{n:'الأسئلة',tt:'body',cb:1,f:[['type','النوع','s',TY],['body','نص السؤال','a'],['opts','الخيارات (سطر لكل خيار — للاختيار والمتعدد)','a'],
+  ['ans','الإجابة الصحيحة','a'],['explanation','الشرح','a'],['level_id','المستوى','r','levels'],['book_id','الكتاب','r','books'],['topic_id','الباب','r','topics'],
+  ['source','المصدر','t'],['source_volume','الجزء','t'],['source_page','الصفحة','t'],['status','الحالة','s',[...ST,['quiz_only','داخل الاختبارات فقط']]]],
+  hint:'الإجابة: اختيار ← رقم الخيار (1،2..) | متعدد ← أرقام بفاصلة (1,3) | صح/خطأ ← اكتب صح أو خطأ | أكمل الفراغ/قصيرة ← كل إجابة مقبولة في سطر | مفتوح ← إجابة نموذجية'},
+ quizzes:{n:'الاختبارات',tt:'title',cb:1,qq:1,f:[['title','العنوان','t'],['description','الوصف','a'],['topic_id','الباب','r','topics'],['book_id','الكتاب','r','books'],
+  ['level_id','المستوى','r','levels'],['duration_minutes','الزمن بالدقائق (اختياري)','n'],['status','الحالة','s',ST]]},
+ review_sections:{n:'أبواب المراجعات',tt:'title',ord:'sort_order',asc:1,f:[['title','العنوان','t'],['description','وصف','a'],['sort_order','الترتيب','n'],['status','الحالة','s',ST]]},
+ review_items:{n:'خانات المراجعات',tt:'title',f:[['section_id','الباب','r','sec'],['title','العنوان','t'],['content','المحتوى (# عنوان، - عنصر، وإلا فقرة)','a'],
+  ['source','المصدر','t'],['source_volume','الجزء','t'],['source_page','الصفحة','t'],['sort_order','الترتيب','n'],['status','الحالة','s',ST]]},
+ tips:{n:'الفوائد والتنبيهات',tt:'title',cb:1,f:[['title','العنوان','t'],['category','التصنيف','s',TC],['content','المحتوى','a'],['source','المصدر','t'],['status','الحالة','s',ST]]}
+};
+const AL='abcdefghijklmnopqrstuvwxyz',IX=x=>AL.indexOf(x)+1,ID=n=>AL[+n-1];
+function pack(d){const t=d.type,a=(d.ans||'').trim(),o=(d.opts||'').split('\n').map(s=>s.trim()).filter(Boolean);delete d.ans;delete d.opts;
+ d.options=['mcq','multi'].includes(t)?o.map((x,i)=>({id:AL[i],text:x})):null;
+ d.correct_answer=t=='mcq'?(a?ID(a):null):t=='multi'?a.split(/[,،\s]+/).filter(Boolean).map(ID):t=='true_false'?(a?a=='صح':null):t=='open'?a:a.split('\n').map(s=>s.trim()).filter(Boolean)}
+function unpack(r){const c=r.correct_answer,t=r.type;r.opts=(r.options||[]).map(o=>o.text).join('\n');
+ r.ans=c==null?'':t=='mcq'?IX(c):t=='multi'?c.map(IX).join(','):t=='true_false'?(c?'صح':'خطأ'):Array.isArray(c)?c.join('\n'):c}
+async function loadL(){const q=(t,c)=>sb.from(t).select(c).order(t=='review_sections'?'sort_order':t=='levels'?'id':'name');
+ const [a,b,c,d]=await Promise.all([q('levels','id,name'),q('books','id,name'),q('topics','id,name'),q('review_sections','id,title')]);
+ L={levels:(a.data||[]).map(x=>[x.id,x.name]),books:(b.data||[]).map(x=>[x.id,x.name]),topics:(c.data||[]).map(x=>[x.id,x.name]),sec:(d.data||[]).map(x=>[x.id,x.title])}}
+const nm=(k,id)=>(L[k].find(x=>x[0]==id)||[,'—'])[1];
+function bar(){$('#hb').innerHTML=ME?'<button class="l" onclick="home()">الرئيسية</button><button class="r" onclick="out()">خروج</button>':''}
+async function out(){await sb.auth.signOut();ME=null;bar();login()}
+function login(){M.innerHTML=`<div class=c><h3>دخول المشرف</h3><label>البريد</label><input id=em type=email autocomplete=username><label>كلمة المرور</label><input id=pw type=password autocomplete=current-password><button onclick="go()">دخول</button></div>`}
+async function go(){const {error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});if(err(error))return;boot()}
+async function boot(){const {data:{user}}=await sb.auth.getUser();if(!user)return login();ME=user;
+ const {error}=await sb.rpc('admin_stats');if(error){alert('هذا الحساب ليس مشرفًا');await sb.auth.signOut();ME=null;return login()}
+ await loadL();bar();home()}
+const SL={installs_total:'التثبيتات',installs_active_7d:'نشط 7 أيام',installs_active_30d:'نشط 30 يومًا',installs_with_notifications:'إشعارات مفعّلة',questions_published:'أسئلة منشورة',quizzes_published:'اختبارات',review_items_published:'خانات مراجعة',tips_published:'فوائد',comment_threads_awaiting_reply:'تعليقات بلا رد',supervisor_questions_open:'أسئلة للمشرف',attempts_pending_review:'نتائج بانتظار المراجعة'};
+async function home(){const {data,error}=await sb.rpc('admin_stats');if(err(error))return;
+ M.innerHTML=`<div class=g>${Object.entries(data).map(([k,v])=>`<div class=c><div class=n>${v}</div><div class=s>${SL[k]||k}</div></div>`).join('')}</div>
+ <div class=c>${Object.entries(E).map(([k,e])=>`<button onclick="list('${k}')">${e.n}</button>`).join('')}<button class=y onclick="inbox()">الوارد</button><button class=y onclick="notif()">إشعار</button></div>`}
+async function list(k,p=0){const e=E[k],{data,error}=await sb.from(k).select('*').order(e.ord||'created_at',{ascending:!!e.asc}).range(p*30,p*30+29);if(err(error))return;
+ M.innerHTML=`<h3>${e.n}</h3>${e.fixed?'':`<button class=y onclick="form('${k}')">+ إضافة</button>`}`+(data.length?data.map(r=>`<div class=c>${esc(cut(r[e.tt],90))}<div class=s>${r.status||''} ${r.type||''}</div>
+ <button onclick='form("${k}",${esc(JSON.stringify(r)).replace(/'/g,"&#39;")})'>تعديل</button>${e.qq?`<button class=y onclick="qq('${r.id}')">الأسئلة (${r.question_count})</button>`:''}${e.fixed?'':`<button class=r onclick="del('${k}','${r.id}')">حذف</button>`}</div>`).join(''):'<p class=s>لا يوجد شيء بعد.</p>')
+ +`${p?`<button class=l onclick="list('${k}',${p-1})">السابق</button>`:''}${data.length==30?`<button class=l onclick="list('${k}',${p+1})">التالي</button>`:''}`}
+function inp([k,l,t,o],v){v=v??'';const i='f_'+k;let h=`<label>${l}</label>`;
+ if(t=='a')h+=`<textarea id=${i}>${esc(v)}</textarea>`;
+ else if(t=='s'||t=='r'){h+=`<select id=${i}>${t=='r'?'<option value="">—</option>':''}${(t=='s'?o:L[o]||[]).map(([a,b])=>`<option value="${esc(a)}"${a==v?' selected':''}>${esc(b)}</option>`).join('')}</select>`}
+ else h+=`<input id=${i} type=${t=='n'?'number':'text'} value="${esc(v)}">`;return h}
+function form(k,row={}){const e=E[k],r={...row};if(k=='questions'&&row.id)unpack(r);
+ M.innerHTML=`<h3>${row.id!=null?'تعديل':'إضافة'} — ${e.n}</h3>${e.hint?`<p class=s>${e.hint}</p>`:''}${e.f.map(f=>inp(f,r[f[0]])).join('')}<button onclick='save("${k}",${JSON.stringify(row.id??null)})'>حفظ</button><button class=l onclick="list('${k}')">إلغاء</button>`}
+async function save(k,id){const e=E[k],d={};
+ e.f.forEach(([key,,t])=>{const v=$('#f_'+key).value.trim();d[key]=v===''?(key=='content'?'':key=='sort_order'?0:null):t=='n'?+v:v});
+ if(k=='questions')pack(d);if(id==null&&e.cb)d.created_by=ME.id;
+ const x=id!=null?await sb.from(k).update(d).eq('id',id):await sb.from(k).insert(d);if(err(x.error))return;await loadL();list(k)}
+async function del(k,id){if(!confirm('حذف نهائي؟'))return;const {error}=await sb.from(k).delete().eq('id',id);if(err(error))return;await loadL();list(k)}
+async function qq(id){const [a,b]=await Promise.all([sb.from('questions').select('id,body,status').order('created_at',{ascending:false}).limit(200),sb.from('quiz_questions').select('*').eq('quiz_id',id)]);
+ if(err(a.error||b.error))return;const m=Object.fromEntries(b.data.map(x=>[x.question_id,x.marks]));
+ M.innerHTML=`<h3>أسئلة الاختبار</h3><p class=s>آخر 200 سؤال. حدّد الأسئلة وعلامة كل سؤال.</p>${a.data.map(q=>`<div class=c><label><input type=checkbox class=ck value="${q.id}" ${q.id in m?'checked':''} style="width:auto"> ${esc(cut(q.body,100))} <span class=s>(${q.status})</span></label><input type=number step=any class=mk value="${m[q.id]??1}"></div>`).join('')}
+ <button onclick="qsave('${id}')">حفظ</button><button class=l onclick="list('quizzes')">رجوع</button>`}
+async function qsave(id){const rows=[...document.querySelectorAll('.ck')].map((c,i)=>({c,i})).filter(x=>x.c.checked).map((x,p)=>({quiz_id:id,question_id:x.c.value,position:p,marks:+document.querySelectorAll('.mk')[x.i].value||1}));
+ if(rows.length){const u=await sb.from('quiz_questions').upsert(rows,{onConflict:'quiz_id,question_id'});if(err(u.error))return}
+ let d=sb.from('quiz_questions').delete().eq('quiz_id',id);if(rows.length)d=d.not('question_id','in','('+rows.map(r=>r.question_id).join(',')+')');
+ if(err((await d).error))return;list('quizzes')}
+async function inbox(){const [c,s]=await Promise.all([sb.from('question_comments').select('*').order('created_at',{ascending:false}).limit(200),sb.from('supervisor_questions').select('*').eq('status','open').order('created_at')]);
+ if(err(c.error||s.error))return;const T={};c.data.forEach(x=>(T[x.question_id+'|'+x.student_id]??=[]).push(x));
+ const ids=[...new Set(c.data.map(x=>x.question_id))],qs=ids.length?(await sb.from('questions').select('id,body').in('id',ids)).data:[];
+ const qb=Object.fromEntries(qs.map(q=>[q.id,q.body])),th=Object.entries(T).sort((a,b)=>(b[1][0].sender_role=='student')-(a[1][0].sender_role=='student'));
+ M.innerHTML=`<h3>أسئلة للمشرف (${s.data.length})</h3>${s.data.map(x=>`<div class=c><div>${esc(x.body)}</div><div class=s>${x.topic_id?nm('topics',x.topic_id):''} ${x.book_id?nm('books',x.book_id):''} ${esc(x.reference_text||'')}</div><textarea id="a_${x.id}" placeholder="الرد"></textarea><button onclick="ans('${x.id}')">إرسال الرد</button></div>`).join('')||'<p class=s>لا شيء.</p>'}
+ <h3>تعليقات الأسئلة</h3>${th.map(([k,ms])=>{const [q,st]=k.split('|');return `<div class=c><b>${esc(cut(qb[q]||'(سؤال محذوف)',90))}</b><div class=s>${ms[0].sender_role=='student'?'بانتظار الرد':'تم الرد'}</div>${[...ms].reverse().map(x=>`<div class="m ${x.sender_role=='admin'?'a':''}">${esc(x.body)}</div>`).join('')}<textarea id="r_${q}_${st}" placeholder="رد"></textarea><button onclick="rep('${q}','${st}')">رد</button></div>`}).join('')||'<p class=s>لا شيء.</p>'}`}
+async function ans(id){const v=$('#a_'+id).value.trim();if(!v)return;if(err((await sb.from('supervisor_questions').update({answer:v,status:'answered',answered_at:new Date().toISOString(),answered_by:ME.id}).eq('id',id)).error))return;inbox()}
+async function rep(q,st){const v=$(`#r_${q}_${st}`).value.trim();if(!v)return;if(err((await sb.from('question_comments').insert({question_id:q,student_id:st,sender_role:'admin',author_admin_id:ME.id,body:v})).error))return;inbox()}
+function notif(){M.innerHTML=`<h3>إشعار</h3><p class=s>يُحفظ الآن في الطابور، والإرسال الفعلي يُفعَّل في المرحلة 6.</p><label>العنوان</label><input id=nt><label>الوصف</label><textarea id=nb></textarea><label>النوع</label><select id=ny><option value=general>عام</option><option value=question>سؤال</option><option value=quiz>اختبار</option><option value=review>مراجعة</option><option value=tip>فائدة</option></select><label>معرّف المحتوى (اختياري)</label><input id=ni><label>الباب</label><select id=ntp><option value="">—</option>${L.topics.map(([a,b])=>`<option value="${a}">${esc(b)}</option>`).join('')}</select><button onclick="nsend()">حفظ</button>`}
+async function nsend(){const d={title:$('#nt').value.trim(),body:$('#nb').value.trim()||null,content_type:$('#ny').value,content_id:$('#ni').value.trim()||null,topic_id:$('#ntp').value||null,created_by:ME.id};
+ if(!d.title)return alert('العنوان مطلوب');if(err((await sb.from('notifications').insert(d)).error))return;alert('تم الحفظ');home()}
+boot();
+</script></body></html>
